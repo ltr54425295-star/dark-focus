@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dark Focus</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #121212;
+            --surface-hover: #1e1e1e;
+            --primary: #bb86fc;
+            --secondary: #03dac6;
+            --text: #ffffff;
+            --text-muted: #888888;
+            --danger: #cf6679;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            background-color: var(--bg); color: var(--text); 
+            font-family: 'Inter', sans-serif; height: 100vh; 
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* Шапка */
+        header {
+            padding: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--surface);
+        }
+        .logo { font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+        .logo span { color: var(--primary); }
+
+        /* Основной контент */
+        .content { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* Блок Таймера */
+        .timer-card {
+            background: var(--surface); border-radius: 16px; padding: 30px 20px;
+            text-align: center; border: 1px solid #222;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .timer-display { font-size: 64px; font-weight: 800; margin-bottom: 20px; font-variant-numeric: tabular-nums; }
+        .timer-controls { display: flex; justify-content: center; gap: 15px; }
+        .btn-timer {
+            background: var(--primary); color: #000; border: none; 
+            padding: 12px 24px; border-radius: 30px; font-weight: 800; font-size: 16px;
+            cursor: pointer; transition: 0.2s;
+        }
+        .btn-timer:active { transform: scale(0.95); }
+        .btn-timer.reset { background: var(--surface-hover); color: var(--text); }
+
+        /* Блок Задач */
+        .tasks-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .tasks-header h2 { font-size: 18px; font-weight: 600; }
+        .task-count { font-size: 12px; background: var(--surface-hover); padding: 4px 10px; border-radius: 20px; color: var(--text-muted); }
+        
+        .add-task-form { display: flex; gap: 10px; margin-bottom: 15px; }
+        .add-task-form input {
+            flex: 1; background: var(--surface); border: 1px solid #333;
+            padding: 15px; border-radius: 12px; color: var(--text); font-size: 16px; outline: none;
+        }
+        .add-task-form input:focus { border-color: var(--primary); }
+        .add-task-form button {
+            background: var(--primary); color: #000; border: none; width: 54px;
+            border-radius: 12px; font-size: 24px; font-weight: bold; cursor: pointer;
+        }
+
+        .task-list { display: flex; flex-direction: column; gap: 10px; }
+        .task-item {
+            background: var(--surface); padding: 15px; border-radius: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-left: 4px solid var(--primary); animation: slideIn 0.3s ease;
+        }
+        .task-item.completed { border-left-color: var(--secondary); opacity: 0.6; }
+        .task-item.completed .task-text { text-decoration: line-through; color: var(--text-muted); }
+        
+        .task-text { font-size: 16px; flex: 1; margin-right: 15px; word-break: break-word; }
+        .task-actions { display: flex; gap: 10px; }
+        .task-actions button { background: none; border: none; font-size: 20px; cursor: pointer; }
+        .btn-check { color: var(--secondary); }
+        .btn-delete { color: var(--danger); }
+
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">DARK<span>FOCUS</span></div>
+        <div style="font-size: 12px; color: var(--text-muted);" id="date-display"></div>
+    </header>
+
+    <div class="content">
+        <!-- Таймер -->
+        <div class="timer-card">
+            <div class="timer-display" id="timer">25:00</div>
+            <div class="timer-controls">
+                <button class="btn-timer" id="start-btn" onclick="toggleTimer()">СТАРТ</button>
+                <button class="btn-timer reset" onclick="resetTimer()">СБРОС</button>
+            </div>
+        </div>
+
+        <!-- Задачи -->
+        <div>
+            <div class="tasks-header">
+                <h2>Задачи на сегодня</h2>
+                <div class="task-count" id="task-count">0</div>
+            </div>
+            
+            <div class="add-task-form">
+                <input type="text" id="task-input" placeholder="Новая задача..." onkeyup="if(event.key==='Enter') addTask()">
+                <button onclick="addTask()">+</button>
+            </div>
+
+            <div class="task-list" id="task-list">
+                <!-- Задачи рендерятся здесь -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
+
+        // --- ДАТА ---
+        const dateOptions = { weekday: 'short', day: 'numeric', month: 'short' };
+        document.getElementById('date-display').innerText = new Date().toLocaleDateString('ru-RU', dateOptions).toUpperCase();
+
+        // --- ТАЙМЕР ПОМОДОРО ---
+        let timeLeft = 25 * 60;
+        let timerInterval = null;
+        let isRunning = false;
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            const seconds = (timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timer').innerText = `${minutes}:${seconds}`;
+        }
+
+        function toggleTimer() {
+            const btn = document.getElementById('start-btn');
+            if (isRunning) {
+                clearInterval(timerInterval);
+                btn.innerText = 'СТАРТ';
+                btn.style.background = 'var(--primary)';
+            } else {
+                timerInterval = setInterval(() => {
+                    if (timeLeft > 0) {
+                        timeLeft--;
+                        updateTimerDisplay();
+                    } else {
+                        clearInterval(timerInterval);
+                        isRunning = false;
+                        btn.innerText = 'СТАРТ';
+                        btn.style.background = 'var(--primary)';
+                        tg.showAlert("Время вышло! Пора отдохнуть.");
+                    }
+                }, 1000);
+                btn.innerText = 'ПАУЗА';
+                btn.style.background = 'var(--danger)';
+            }
+            isRunning = !isRunning;
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            isRunning = false;
+            timeLeft = 25 * 60;
+            updateTimerDisplay();
+            const btn = document.getElementById('start-btn');
+            btn.innerText = 'СТАРТ';
+            btn.style.background = 'var(--primary)';
+        }
+
+        // --- СИСТЕМА ЗАДАЧ ---
+        let tasks = JSON.parse(localStorage.getItem('darkFocusTasks')) || [];
+
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            const countEl = document.getElementById('task-count');
+            list.innerHTML = '';
+            
+            let completedCount = 0;
+
+            tasks.forEach((task, index) => {
+                if (task.completed) completedCount++;
+
+                const div = document.createElement('div');
+                div.className = `task-item ${task.completed ? 'completed' : ''}`;
+                div.innerHTML = `
+                    <div class="task-text">${task.text}</div>
+                    <div class="task-actions">
+                        <button class="btn-check" onclick="toggleTask(${index})">✓</button>
+                        <button class="btn-delete" onclick="deleteTask(${index})">✕</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+
+            countEl.innerText = `${completedCount} / ${tasks.length}`;
+        }
+
+        function addTask() {
+            const input = document.getElementById('task-input');
+            const text = input.value.trim();
+            if (text) {
+                tasks.unshift({ text: text, completed: false });
+                input.value = '';
+                saveAndRender();
+            }
+        }
+
+        function toggleTask(index) {
+            tasks[index].completed = !tasks[index].completed;
+            saveAndRender();
+        }
+
+        function deleteTask(index) {
+            tasks.splice(index, 1);
+            saveAndRender();
+        }
+
+        function saveAndRender() {
+            localStorage.setItem('darkFocusTasks', JSON.stringify(tasks));
+            renderTasks();
+        }
+
+        // Инициализация
+        updateTimerDisplay();
+        renderTasks();
+    </script>
+</body>
+</html>
